@@ -125,7 +125,32 @@ export async function requestOpenAICompatibleTranslations({
         ],
         temperature: 0,
         stream: false,
-        response_format: {type: 'json_object'}
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'translation_batch',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                translations: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: {type: 'string'},
+                      translation: {type: 'string'}
+                    },
+                    required: ['id', 'translation'],
+                    additionalProperties: false
+                  }
+                }
+              },
+              required: ['translations'],
+              additionalProperties: false
+            }
+          }
+        }
       }),
       signal
     });
