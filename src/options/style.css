@@ -618,8 +618,14 @@ button:disabled, input:disabled, textarea:disabled, select:disabled {
   padding: 13px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
+  color: inherit;
   background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
 }
+
+.provider-option:disabled { cursor: default; opacity: .65; }
 
 .provider-option.selected {
   border-color: #2563eb;
@@ -746,6 +752,46 @@ button:disabled, input:disabled, textarea:disabled, select:disabled {
   width: 388px;
   margin-top: 5px;
   line-height: 14px;
+}
+
+.service-field {
+  display: block;
+  width: 388px;
+  margin-top: 25px;
+}
+
+.service-field + .service-field { margin-top: 17px; }
+
+.service-field > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.service-field input {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  outline: 0;
+  color: #111827;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+
+.service-field input:focus { border-color: #2563eb; }
+
+.service-local-note {
+  width: 388px;
+  margin: 21px 0 0;
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 17px;
 }
 
 .model-heading {

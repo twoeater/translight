@@ -79,6 +79,7 @@ async function settle() {
 
 afterEach(() => {
   vi.resetModules();
+  vi.unstubAllGlobals();
   delete globalThis.chrome;
   delete globalThis.__translight_test_harness__;
   backgroundMessageListeners.length = 0;
@@ -94,6 +95,66 @@ afterEach(() => {
 });
 
 describe('background automatic translation status', () => {
+  it('proxies an OpenAI-compatible batch through the service worker', async () => {
+    installChrome({autoTranslateSites: []});
+    Object.assign(settings, {
+      translationProvider: 'openai-compatible',
+      openAiBaseUrl: 'http://192.168.0.8:11434/v1',
+      openAiModel: 'local-model',
+      targetLanguage: 'ko'
+    });
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{
+          finish_reason: 'stop',
+          message: {
+            content: JSON.stringify({
+              translations: [{id: 'item-1', translation: '안녕하세요'}]
+            })
+          }
+        }]
+      })
+    }));
+    vi.stubGlobal('fetch', fetch);
+    await import('../src/background/index.js?background-openai-compatible');
+
+    const response = await new Promise((resolve) => {
+      const keepAlive = runtimeMessage({
+        type: 'OPENAI_COMPATIBLE_TRANSLATE',
+        baseUrl: 'http://192.168.0.99:9999/v1',
+        items: [{id: 'item-1', text: 'Hello'}]
+      }, {}, resolve);
+      expect(keepAlive).toBe(true);
+    });
+
+    expect(response).toEqual({
+      ok: true,
+      translations: [{id: 'item-1', translation: '안녕하세요'}]
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'http://192.168.0.8:11434/v1/chat/completions',
+      expect.objectContaining({method: 'POST'})
+    );
+  });
+
+  it('does not proxy local requests unless the saved provider is selected', async () => {
+    installChrome({autoTranslateSites: []});
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await import('../src/background/index.js?background-openai-compatible-disabled');
+
+    const response = await new Promise((resolve) => {
+      runtimeMessage({
+        type: 'OPENAI_COMPATIBLE_TRANSLATE',
+        items: [{id: 'item-1', text: 'Hello'}]
+      }, {}, resolve);
+    });
+
+    expect(response).toMatchObject({ok: false, errorCode: 'INVALID_CONFIGURATION'});
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('reports a production build and rejects dummy configuration', async () => {
     installChrome({autoTranslateSites: []});
     await import('../src/background/index.js?background-production-dummy-guard');

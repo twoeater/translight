@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PageSession } from '../src/content/page-session.js';
 import { SEGMENT_SELECTOR } from '../src/content/block-collector.js';
 import { MODEL_STATE } from '../src/translation/model-state.js';
-import { TRANSLATION_MODES } from '../src/settings.js';
+import { TRANSLATION_MODES, TRANSLATION_PROVIDERS } from '../src/settings.js';
 import { DummyTranslateProvider } from '../src/translation/dummy-provider.js';
 
 function makeProvider({
@@ -1447,6 +1447,31 @@ describe('PageSession', () => {
     expect(session.provider.targetLanguage).toBe('ko');
     expect(session.provider.pair).toBe('en:ko');
     session.stop({notify: false});
+  });
+
+  it('creates the configured OpenAI-compatible provider for a private-network server', () => {
+    const previousChrome = globalThis.chrome;
+    globalThis.chrome = {runtime: {sendMessage: vi.fn()}};
+    try {
+      const session = new PageSession({
+        generation: 13,
+        document,
+        settings: {
+          translationProvider: TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE,
+          openAiBaseUrl: 'http://192.168.0.8:11434/v1',
+          openAiModel: 'local-model'
+        }
+      });
+
+      expect(session.provider.constructor.name).toBe('OpenAICompatibleProvider');
+      expect(session.provider.pair).toBe(
+        'openai-compatible:http://192.168.0.8:11434/v1:local-model:ko'
+      );
+      session.stop({notify: false});
+    } finally {
+      if (previousChrome === undefined) delete globalThis.chrome;
+      else globalThis.chrome = previousChrome;
+    }
   });
 
   it('translates table cells and rechecks cells whose text changes', async () => {

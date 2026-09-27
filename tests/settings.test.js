@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   SETTINGS_KEY,
   TRANSLATION_MODES,
+  TRANSLATION_PROVIDERS,
   TRANSLATION_STYLES,
   createDefaultSettings,
   loadSettings,
@@ -10,6 +11,7 @@ import {
   normalizeHostname,
   normalizeHostnameList,
   normalizeSettings,
+  openAiHostPermissionPattern,
   parseSettings,
   saveSettings,
   serializeSettings,
@@ -24,11 +26,50 @@ describe('settings normalization', () => {
       textColor: '#111827',
       bold: false,
       italic: false,
+      translationProvider: TRANSLATION_PROVIDERS.CHROME,
+      openAiBaseUrl: 'http://127.0.0.1:11434/v1',
+      openAiModel: '',
       autoTranslateSameSite: false,
       translatePageTitle: false
     });
     expect(createDefaultSettings()).toEqual(DEFAULT_SETTINGS);
     expect(normalizeSettings({schemaVersion: 1})).toMatchObject(DEFAULT_SETTINGS);
+  });
+
+  it('accepts a configured local OpenAI-compatible provider', () => {
+    expect(parseSettings(JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      translationProvider: TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE,
+      openAiBaseUrl: 'http://192.168.0.8:1234/v1/',
+      openAiModel: 'local-model'
+    }))).toMatchObject({
+      translationProvider: TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE,
+      openAiBaseUrl: 'http://192.168.0.8:1234/v1',
+      openAiModel: 'local-model'
+    });
+  });
+
+  it('requests only the configured private-network host regardless of port', () => {
+    expect(openAiHostPermissionPattern('http://192.168.0.8:11434/v1'))
+      .toBe('http://192.168.0.8/*');
+    expect(openAiHostPermissionPattern('http://127.0.0.1:11434/v1'))
+      .toBe('http://127.0.0.1/*');
+    expect(openAiHostPermissionPattern('https://api.example.com/v1')).toBe('');
+    expect(openAiHostPermissionPattern('http://fc/v1')).toBe('');
+  });
+
+  it('rejects remote or incomplete OpenAI-compatible settings', () => {
+    expect(() => parseSettings(JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      translationProvider: TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE,
+      openAiBaseUrl: 'https://api.example.com/v1',
+      openAiModel: 'remote-model'
+    }))).toThrow(/openAiBaseUrl/u);
+    expect(() => parseSettings(JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      translationProvider: TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE,
+      openAiModel: ''
+    }))).toThrow(/openAiModel/u);
   });
 
   it('normalizes URL and hostname entries into unique hostnames', () => {

@@ -14,5 +14,6 @@ describe('extension manifest', () => {
     expect(manifest.permissions).toContain('activeTab');
     expect(manifest.permissions).toContain('scripting');
     expect(manifest.host_permissions).toBeUndefined();
+    expect(manifest.optional_host_permissions).toEqual(['http://*/*']);
   });
 });

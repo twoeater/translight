@@ -190,6 +190,12 @@
   "serviceProviderChromeDescription": {
     "message": "Translator API · Free"
   },
+  "serviceProviderOpenAi": {
+    "message": "OpenAI-compatible API"
+  },
+  "serviceProviderOpenAiDescription": {
+    "message": "Ollama, LM Studio, and other local/private servers"
+  },
   "serviceProviderActive": {
     "message": "Active"
   },
@@ -202,8 +208,26 @@
   "serviceDetailsDescription": {
     "message": "Check and manage the Chrome translation model."
   },
+  "serviceOpenAiDetailsDescription": {
+    "message": "Configure the local translation server connection."
+  },
   "serviceChromeDescription": {
     "message": "Chrome's built-in Translator API runs on-device without an internet connection or usage limits after the model is downloaded. Korean models download automatically the first time they are needed."
+  },
+  "serviceOpenAiDescription": {
+    "message": "Translate with a local LLM that implements the OpenAI Chat Completions API. External domains are not allowed."
+  },
+  "serviceOpenAiBaseUrl": {
+    "message": "API base URL"
+  },
+  "serviceOpenAiModel": {
+    "message": "Model"
+  },
+  "serviceOpenAiLocalNote": {
+    "message": "Saving requests access only to the entered local or private-network host. Page text selected for translation is sent to that server."
+  },
+  "servicePermissionDenied": {
+    "message": "Access to the local translation server is required."
   },
   "serviceModelTitle": {
     "message": "Translation model"

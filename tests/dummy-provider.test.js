@@ -8,7 +8,8 @@ import {
 } from '../src/translation/dummy-provider.js';
 import {
   assertDummyProviderAllowed,
-  createTranslationProvider
+  createTranslationProvider,
+  PROVIDER_TYPES
 } from '../src/translation/provider-factory.js';
 import {MODEL_STATE} from '../src/translation/model-state.js';
 
@@ -96,5 +97,15 @@ describe('provider selection isolation', () => {
   it('rejects unsupported provider names instead of falling back', () => {
     expect(() => createTranslationProvider({type: 'unexpected'}))
       .toThrowError(/Unsupported translation provider/u);
+  });
+
+  it('creates the production OpenAI-compatible provider explicitly', () => {
+    const provider = createTranslationProvider({
+      type: PROVIDER_TYPES.OPENAI_COMPATIBLE,
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      model: 'test-model',
+      runtime: {sendMessage: () => Promise.resolve()}
+    });
+    expect(provider.constructor.name).toBe('OpenAICompatibleProvider');
   });
 });

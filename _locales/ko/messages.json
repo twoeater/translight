@@ -190,6 +190,12 @@
   "serviceProviderChromeDescription": {
     "message": "Translator API · 무료"
   },
+  "serviceProviderOpenAi": {
+    "message": "OpenAI 호환 API"
+  },
+  "serviceProviderOpenAiDescription": {
+    "message": "Ollama·LM Studio 등 · 로컬/사설망"
+  },
   "serviceProviderActive": {
     "message": "사용 중"
   },
@@ -202,8 +208,26 @@
   "serviceDetailsDescription": {
     "message": "Chrome 번역 모델의 상태를 확인하고 관리합니다."
   },
+  "serviceOpenAiDetailsDescription": {
+    "message": "로컬 번역 서버 연결을 설정합니다."
+  },
   "serviceChromeDescription": {
     "message": "Chrome 내장 Translator API는 모델을 다운로드하면 인터넷 연결이나 사용량 제한 없이 기기에서 무료로 작동하는 온디바이스 번역 기능입니다. 한국어 모델은 최초 사용 시 자동으로 다운로드됩니다."
+  },
+  "serviceOpenAiDescription": {
+    "message": "OpenAI Chat Completions 호환 API를 사용하는 로컬 LLM으로 번역합니다. 외부 도메인은 허용하지 않습니다."
+  },
+  "serviceOpenAiBaseUrl": {
+    "message": "API 기본 주소"
+  },
+  "serviceOpenAiModel": {
+    "message": "모델"
+  },
+  "serviceOpenAiLocalNote": {
+    "message": "저장하면 입력한 로컬 또는 사설망 호스트에 대한 접근 권한을 요청합니다. 번역할 페이지 텍스트는 해당 서버로 전송됩니다."
+  },
+  "servicePermissionDenied": {
+    "message": "로컬 번역 서버 접근 권한이 필요합니다."
   },
   "serviceModelTitle": {
     "message": "번역 모델"

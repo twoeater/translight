@@ -1,6 +1,7 @@
 export const SETTINGS_KEY = 'translight.settings.v1';
-export const SETTINGS_SCHEMA_VERSION = 2;
-export const SUPPORTED_SETTINGS_SCHEMA_VERSIONS = Object.freeze([1, SETTINGS_SCHEMA_VERSION]);
+export const SETTINGS_SCHEMA_VERSION = 3;
+export const SUPPORTED_SETTINGS_SCHEMA_VERSIONS = Object.freeze([1, 2, SETTINGS_SCHEMA_VERSION]);
+export const DEFAULT_OPENAI_BASE_URL = 'http://127.0.0.1:11434/v1';
 
 export const TRANSLATION_MODES = Object.freeze({
   ORIGINAL_TRANSLATION: 'original-translation',
@@ -22,7 +23,8 @@ export const TRANSLATION_STYLES = Object.freeze({
 });
 
 export const TRANSLATION_PROVIDERS = Object.freeze({
-  CHROME: 'chrome'
+  CHROME: 'chrome',
+  OPENAI_COMPATIBLE: 'openai-compatible'
 });
 
 export const TARGET_LANGUAGES = Object.freeze({
@@ -45,6 +47,8 @@ const SETTINGS_FIELDS = new Set([
   'italic',
   'targetLanguage',
   'translationProvider',
+  'openAiBaseUrl',
+  'openAiModel',
   'autoTranslateSameSite',
   'translatePageTitle',
   'autoTranslateSites'
@@ -60,6 +64,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   italic: false,
   targetLanguage: TARGET_LANGUAGES.KOREAN,
   translationProvider: TRANSLATION_PROVIDERS.CHROME,
+  openAiBaseUrl: DEFAULT_OPENAI_BASE_URL,
+  openAiModel: '',
   autoTranslateSameSite: false,
   translatePageTitle: false,
   autoTranslateSites: []
@@ -88,6 +94,57 @@ function normalizeString(value, fallback = '') {
   if (typeof value !== 'string') return fallback;
   const normalized = value.trim();
   return normalized || fallback;
+}
+
+function ipv4Parts(hostname) {
+  const parts = String(hostname).split('.');
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/u.test(part))) return null;
+  const values = parts.map(Number);
+  return values.every((part) => part >= 0 && part <= 255) ? values : null;
+}
+
+export function isPrivateNetworkHostname(hostname) {
+  const normalized = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/gu, '');
+  if (normalized === 'localhost' || normalized === '::1') return true;
+  if (normalized.includes(':') &&
+      (/^(?:fc|fd)[0-9a-f:]*$/u.test(normalized) || /^fe[89ab][0-9a-f:]*$/u.test(normalized))) {
+    return true;
+  }
+  const parts = ipv4Parts(normalized);
+  if (!parts) return false;
+  return parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168);
+}
+
+export function normalizeOpenAiBaseUrl(value, fallback = DEFAULT_OPENAI_BASE_URL) {
+  const candidate = normalizeString(value, fallback);
+  try {
+    const url = new URL(candidate);
+    if (url.pathname !== '/') url.pathname = url.pathname.replace(/\/+$/u, '');
+    return url.href.replace(/\/$/u, '');
+  } catch {
+    return candidate;
+  }
+}
+
+export function isValidOpenAiBaseUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'http:' &&
+      !url.username && !url.password && !url.search && !url.hash &&
+      isPrivateNetworkHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function openAiHostPermissionPattern(value) {
+  if (!isValidOpenAiBaseUrl(value)) return '';
+  const url = new URL(value);
+  return `${url.protocol}//${url.hostname}/*`;
 }
 
 export function isValidColor(value) {
@@ -188,8 +245,18 @@ export function migrateSettings(value) {
       schemaVersion: SETTINGS_SCHEMA_VERSION,
       targetLanguage: value.targetLanguage ?? TARGET_LANGUAGES.KOREAN,
       translationProvider: value.translationProvider ?? TRANSLATION_PROVIDERS.CHROME,
+      openAiBaseUrl: value.openAiBaseUrl ?? DEFAULT_OPENAI_BASE_URL,
+      openAiModel: value.openAiModel ?? '',
       autoTranslateSameSite: value.autoTranslateSameSite ?? DEFAULT_SETTINGS.autoTranslateSameSite,
       translatePageTitle: value.translatePageTitle ?? DEFAULT_SETTINGS.translatePageTitle
+    };
+  }
+  if (version === 2) {
+    return {
+      ...value,
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      openAiBaseUrl: value.openAiBaseUrl ?? DEFAULT_OPENAI_BASE_URL,
+      openAiModel: value.openAiModel ?? ''
     };
   }
   return {...value, schemaVersion: SETTINGS_SCHEMA_VERSION};
@@ -214,6 +281,8 @@ export function normalizeSettings(value) {
     translationProvider: PROVIDER_VALUES.has(source.translationProvider)
       ? source.translationProvider
       : DEFAULT_SETTINGS.translationProvider,
+    openAiBaseUrl: normalizeOpenAiBaseUrl(source.openAiBaseUrl),
+    openAiModel: normalizeString(source.openAiModel),
     autoTranslateSameSite: normalizeBoolean(
       source.autoTranslateSameSite ?? source.sameSiteAutoTranslate,
       DEFAULT_SETTINGS.autoTranslateSameSite
@@ -272,6 +341,16 @@ export function validateSettingsDocument(value) {
   }
   if (value.translationProvider != null && !PROVIDER_VALUES.has(value.translationProvider)) {
     throw invalidField('translationProvider', 'unsupported translation provider');
+  }
+  if (value.openAiBaseUrl != null && !isValidOpenAiBaseUrl(value.openAiBaseUrl)) {
+    throw invalidField('openAiBaseUrl', 'expected a localhost or private-network HTTP URL');
+  }
+  if (value.openAiModel != null && typeof value.openAiModel !== 'string') {
+    throw invalidField('openAiModel', 'expected a string');
+  }
+  if (value.translationProvider === TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE &&
+      !normalizeString(value.openAiModel)) {
+    throw invalidField('openAiModel', 'model is required for the OpenAI-compatible provider');
   }
   if (value.autoTranslateSites != null) {
     if (!Array.isArray(value.autoTranslateSites)) {

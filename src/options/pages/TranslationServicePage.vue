@@ -1,6 +1,7 @@
 <script setup>
-import {computed, onMounted, onUnmounted, ref} from 'vue';
+import {computed, onMounted, onUnmounted, ref, watch} from 'vue';
 import {t} from '../../i18n/index.js';
+import {TRANSLATION_PROVIDERS} from '../../settings.js';
 import {ChromeTranslateProvider} from '../../translation/chrome-provider.js';
 import {MODEL_STATE} from '../../translation/model-state.js';
 import {isTranslationCancelled} from '../../translation/provider.js';
@@ -20,6 +21,10 @@ const error = ref('');
 let disposed = false;
 let operationSequence = 0;
 let operationController = null;
+
+const isChromeProvider = computed(() =>
+  props.settings.translationProvider === TRANSLATION_PROVIDERS.CHROME
+);
 
 const statusLabel = computed(() => {
   switch (modelState.value) {
@@ -159,12 +164,34 @@ async function downloadModel() {
   await prepareDownloading(nextProvider, {id, signal, retry: shouldRetry});
 }
 
-onMounted(() => { void refreshModelState(); });
-onUnmounted(() => {
-  disposed = true;
+function stopChromeProvider() {
   operationSequence += 1;
   operationController?.abort();
+  operationController = null;
   provider.value?.close?.();
+  provider.value = null;
+  refreshing.value = false;
+  downloading.value = false;
+  error.value = '';
+}
+
+function selectProvider(type) {
+  if (props.disabled) return;
+  props.settings.translationProvider = type;
+}
+
+watch(() => props.settings.translationProvider, (type) => {
+  if (type === TRANSLATION_PROVIDERS.CHROME) void refreshModelState();
+  else stopChromeProvider();
+});
+
+onMounted(() => {
+  if (isChromeProvider.value) void refreshModelState();
+  else refreshing.value = false;
+});
+onUnmounted(() => {
+  disposed = true;
+  stopChromeProvider();
 });
 </script>
 
@@ -191,67 +218,117 @@ onUnmounted(() => {
         <section class="service-card provider-card">
           <h3>{{ t('serviceProviderTitle') }}</h3>
           <p>{{ t('serviceProviderDescription') }}</p>
-          <div class="provider-option selected">
-            <span class="provider-accent" />
+          <button
+            type="button"
+            class="provider-option"
+            :class="{selected: isChromeProvider}"
+            :aria-pressed="isChromeProvider"
+            :disabled="disabled"
+            @click="selectProvider(TRANSLATION_PROVIDERS.CHROME)"
+          >
+            <span v-if="isChromeProvider" class="provider-accent" />
             <div>
               <strong>{{ t('serviceProviderChrome') }}</strong>
               <small>{{ t('serviceProviderChromeDescription') }}</small>
             </div>
-            <span class="status-badge" :class="[statusClass, providerStatusVariant]">{{ providerStatusLabel }}</span>
-          </div>
+            <span v-if="isChromeProvider" class="status-badge" :class="[statusClass, providerStatusVariant]">{{ providerStatusLabel }}</span>
+          </button>
+          <button
+            type="button"
+            class="provider-option"
+            :class="{selected: !isChromeProvider}"
+            :aria-pressed="!isChromeProvider"
+            :disabled="disabled"
+            @click="selectProvider(TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE)"
+          >
+            <span v-if="!isChromeProvider" class="provider-accent" />
+            <div>
+              <strong>{{ t('serviceProviderOpenAi') }}</strong>
+              <small>{{ t('serviceProviderOpenAiDescription') }}</small>
+            </div>
+            <span v-if="!isChromeProvider" class="status-badge provider-status-active">{{ t('serviceProviderActive') }}</span>
+          </button>
         </section>
       </div>
 
       <div class="service-column details-column">
         <div class="service-intro">
           <h2>{{ t('serviceDetailsTitle') }}</h2>
-          <p>{{ t('serviceDetailsDescription') }}</p>
+          <p>{{ t(isChromeProvider ? 'serviceDetailsDescription' : 'serviceOpenAiDetailsDescription') }}</p>
         </div>
 
         <section class="service-card details-card">
-          <h3>{{ t('serviceProviderChrome') }}</h3>
-          <p class="service-description">{{ t('serviceChromeDescription') }}</p>
+          <template v-if="isChromeProvider">
+            <h3>{{ t('serviceProviderChrome') }}</h3>
+            <p class="service-description">{{ t('serviceChromeDescription') }}</p>
 
-          <div class="model-heading">
-            <h4>{{ t('serviceModelTitle') }}</h4>
-            <span class="status-badge" :class="[statusClass, modelStatusVariant]">{{ statusLabel }}</span>
-          </div>
-          <div class="model-row">
-            <span>{{ t('serviceModelPair') }}</span>
-            <code>en → ko</code>
-          </div>
-
-          <button
-            v-if="modelState === MODEL_STATE.DOWNLOADABLE || modelState === MODEL_STATE.DOWNLOAD_FAILED"
-            type="button"
-            class="service-action"
-            :disabled="disabled || refreshing || downloading"
-            @click="downloadModel"
-          >
-            {{ modelState === MODEL_STATE.DOWNLOAD_FAILED ? t('serviceRetry') : t('serviceDownload') }}
-          </button>
-          <div v-else-if="modelState === MODEL_STATE.DOWNLOADING" class="download-progress" aria-live="polite">
-            <div class="progress-copy">
-              <span>{{ t('serviceDownloading') }}</span>
-              <span v-if="Number.isFinite(progress)">{{ progressPercent }}%</span>
+            <div class="model-heading">
+              <h4>{{ t('serviceModelTitle') }}</h4>
+              <span class="status-badge" :class="[statusClass, modelStatusVariant]">{{ statusLabel }}</span>
             </div>
-            <div class="progress-track"><span :style="{width: `${progressPercent}%`}" /></div>
-          </div>
-          <p v-if="modelState === MODEL_STATE.AVAILABLE" class="available-note">{{ t('serviceAvailableDescription') }}</p>
-          <div v-if="modelState === MODEL_STATE.UNAVAILABLE" class="service-alert" role="alert">
-            <strong>{{ t('serviceUnavailableTitle') }}</strong>
-            <p>{{ t('serviceUnavailableDescription') }}</p>
-          </div>
-          <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+            <div class="model-row">
+              <span>{{ t('serviceModelPair') }}</span>
+              <code>en → ko</code>
+            </div>
 
-          <div class="service-divider" />
-          <div class="management-link-row">
-            <button type="button" class="management-link" @click="openModelManagement()">
-              {{ t('serviceManagementLink') }}
+            <button
+              v-if="modelState === MODEL_STATE.DOWNLOADABLE || modelState === MODEL_STATE.DOWNLOAD_FAILED"
+              type="button"
+              class="service-action"
+              :disabled="disabled || refreshing || downloading"
+              @click="downloadModel"
+            >
+              {{ modelState === MODEL_STATE.DOWNLOAD_FAILED ? t('serviceRetry') : t('serviceDownload') }}
             </button>
-            <span class="management-link-icon" aria-hidden="true">↗</span>
-          </div>
-          <p class="management-help">{{ t('serviceManagementHelp') }}</p>
+            <div v-else-if="modelState === MODEL_STATE.DOWNLOADING" class="download-progress" aria-live="polite">
+              <div class="progress-copy">
+                <span>{{ t('serviceDownloading') }}</span>
+                <span v-if="Number.isFinite(progress)">{{ progressPercent }}%</span>
+              </div>
+              <div class="progress-track"><span :style="{width: `${progressPercent}%`}" /></div>
+            </div>
+            <p v-if="modelState === MODEL_STATE.AVAILABLE" class="available-note">{{ t('serviceAvailableDescription') }}</p>
+            <div v-if="modelState === MODEL_STATE.UNAVAILABLE" class="service-alert" role="alert">
+              <strong>{{ t('serviceUnavailableTitle') }}</strong>
+              <p>{{ t('serviceUnavailableDescription') }}</p>
+            </div>
+            <p v-if="error" class="field-error" role="alert">{{ error }}</p>
+
+            <div class="service-divider" />
+            <div class="management-link-row">
+              <button type="button" class="management-link" @click="openModelManagement()">
+                {{ t('serviceManagementLink') }}
+              </button>
+              <span class="management-link-icon" aria-hidden="true">↗</span>
+            </div>
+            <p class="management-help">{{ t('serviceManagementHelp') }}</p>
+          </template>
+          <template v-else>
+            <h3>{{ t('serviceProviderOpenAi') }}</h3>
+            <p class="service-description">{{ t('serviceOpenAiDescription') }}</p>
+            <label class="service-field">
+              <span>{{ t('serviceOpenAiBaseUrl') }}</span>
+              <input
+                v-model="props.settings.openAiBaseUrl"
+                type="url"
+                inputmode="url"
+                spellcheck="false"
+                :disabled="disabled"
+                placeholder="http://127.0.0.1:11434/v1"
+              >
+            </label>
+            <label class="service-field">
+              <span>{{ t('serviceOpenAiModel') }}</span>
+              <input
+                v-model="props.settings.openAiModel"
+                type="text"
+                spellcheck="false"
+                :disabled="disabled"
+                placeholder="llama3.2"
+              >
+            </label>
+            <p class="service-local-note">{{ t('serviceOpenAiLocalNote') }}</p>
+          </template>
         </section>
       </div>
     </div>

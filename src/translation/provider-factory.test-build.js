@@ -1,10 +1,12 @@
 import {BUILD_INFO} from '../build-info.js';
 import {ChromeTranslateProvider} from './chrome-provider.js';
 import {DummyTranslateProvider} from './dummy-provider.js';
+import {OpenAICompatibleProvider} from './openai-compatible-provider.js';
 import {TranslationProviderError} from './provider.js';
 
 export const PROVIDER_TYPES = Object.freeze({
   CHROME: 'chrome',
+  OPENAI_COMPATIBLE: 'openai-compatible',
   DUMMY: 'dummy'
 });
 
@@ -19,12 +21,18 @@ export function assertDummyProviderAllowed(testBuild = BUILD_INFO.testBuild) {
 export function createTranslationProvider({
   type = PROVIDER_TYPES.CHROME,
   targetLanguage = 'ko',
+  baseUrl,
+  model,
+  runtime,
   profile,
   delayMs
 } = {}) {
   if (type === PROVIDER_TYPES.DUMMY) {
     assertDummyProviderAllowed();
     return new DummyTranslateProvider({targetLanguage, profile, delayMs});
+  }
+  if (type === PROVIDER_TYPES.OPENAI_COMPATIBLE) {
+    return new OpenAICompatibleProvider({baseUrl, model, targetLanguage, runtime});
   }
   if (type !== PROVIDER_TYPES.CHROME) {
     throw new TranslationProviderError(

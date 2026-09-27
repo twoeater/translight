@@ -8,7 +8,13 @@ import {
   updateTabState
 } from './tab-state.js';
 import { t } from '../i18n/index.js';
-import { loadSettings, hostnameForUrl, matchesAutoTranslateSite, originForUrl } from '../settings.js';
+import {
+  loadSettings,
+  hostnameForUrl,
+  matchesAutoTranslateSite,
+  originForUrl,
+  TRANSLATION_PROVIDERS
+} from '../settings.js';
 import {
   classifyNavigation,
   createLoadingStatePatch,
@@ -16,6 +22,10 @@ import {
   isNavigationStateCurrent
 } from './navigation.js';
 import {BUILD_INFO, IS_TEST_BUILD} from '../build-info.js';
+import {
+  OPENAI_COMPATIBLE_MESSAGE_TYPE,
+  requestOpenAICompatibleTranslations
+} from '../translation/openai-compatible-provider.js';
 
 const STORAGE_KEY = 'translight.tabStates';
 const TEST_PROVIDER_STORAGE_KEY = 'translight.testProvider';
@@ -49,7 +59,10 @@ const ERROR_MESSAGE_KEYS = Object.freeze({
   AVAILABILITY_FAILED: 'errorAvailabilityFailed',
   CONTENT_SCRIPT_UNAVAILABLE: 'errorContentScriptUnavailable',
   DOWNLOAD_FAILED: 'errorModelDownloadFailed',
+  INVALID_CONFIGURATION: 'errorTranslateFailed',
+  INVALID_RESPONSE: 'errorTranslateFailed',
   NOT_READY: 'errorTranslatorNotReady',
+  REQUEST_FAILED: 'errorTranslateFailed',
   TRANSLATE_FAILED: 'errorTranslateFailed',
   TRANSLATION_FAILED: 'errorTranslationFailed',
   UNAVAILABLE: 'errorTranslatorUnavailable'
@@ -835,7 +848,31 @@ chrome.action.onClicked.addListener((tab) => {
   else void handleAction(tab);
 });
 
-chrome.runtime.onMessage.addListener((message, sender) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === OPENAI_COMPATIBLE_MESSAGE_TYPE) {
+    void loadSettings().then((settings) => {
+      if (settings.translationProvider !== TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE) {
+        const error = new Error('The OpenAI-compatible translation service is not selected.');
+        error.code = 'INVALID_CONFIGURATION';
+        throw error;
+      }
+      return requestOpenAICompatibleTranslations({
+        baseUrl: settings.openAiBaseUrl,
+        model: settings.openAiModel,
+        targetLanguage: settings.targetLanguage,
+        items: message.items
+      });
+    }).then((translations) => {
+      sendResponse?.({ok: true, translations});
+    }).catch((error) => {
+      sendResponse?.({
+        ok: false,
+        errorCode: error?.code ?? 'REQUEST_FAILED',
+        errorMessage: error?.message ?? 'The local translation request failed.'
+      });
+    });
+    return true;
+  }
   const tabId = sender?.tab?.id;
   if (message?.type === 'TRANSLATION_STATUS' && typeof tabId === 'number') {
     void enqueueTabOperation(tabId, () => handleTranslationStatus(message, sender));

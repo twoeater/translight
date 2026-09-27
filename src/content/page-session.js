@@ -1,6 +1,6 @@
 import { collectTranslationBlocks, SEGMENT_SELECTOR } from './block-collector.js';
 import { TranslationQueue } from './translation-queue.js';
-import { ChromeTranslateProvider } from '../translation/chrome-provider.js';
+import { createTranslationProvider } from '../translation/provider-factory.js';
 import { MODEL_STATE } from '../translation/model-state.js';
 import { isTranslationCancelled, TranslationCancelledError } from '../translation/provider.js';
 import { TranslationRenderer } from './translation-renderer.js';
@@ -17,6 +17,19 @@ const CANDIDATE_SELECTOR = `${BLOCK_SELECTOR},${SEGMENT_SELECTOR}`;
 const GENERATED_NODE_SELECTOR = '[data-translight-generated="true"]';
 const ROUTE_SETTLE_DELAYS = Object.freeze([100, 500]);
 let sessionSequence = 0;
+
+function providerOptions(settings) {
+  return {
+    type: settings.translationProvider,
+    targetLanguage: settings.targetLanguage,
+    baseUrl: settings.openAiBaseUrl,
+    model: settings.openAiModel
+  };
+}
+
+function providerFingerprint(settings) {
+  return JSON.stringify(providerOptions(settings));
+}
 
 function errorPayload(error) {
   return {
@@ -57,9 +70,7 @@ export class PageSession {
     this.activation = activation;
     this.settings = normalizeSettings(settings ?? createDefaultSettings());
     this.usesDefaultProvider = provider == null;
-    this.provider = provider ?? new ChromeTranslateProvider({
-      targetLanguage: this.settings.targetLanguage
-    });
+    this.provider = provider ?? createTranslationProvider(providerOptions(this.settings));
     // Sessions created by older embedders did not pass the new title toggle.
     // Keep that API backwards-compatible while extension-created sessions use
     // the explicit setting from storage.
@@ -222,7 +233,7 @@ export class PageSession {
       this.notify('CHECKING', {modelState});
 
       if (modelState === MODEL_STATE.UNAVAILABLE) {
-        const error = new Error('Chrome Translator is unavailable in this environment.');
+        const error = new Error('The configured translation service is unavailable.');
         error.code = 'UNAVAILABLE';
         error.openOptions = true;
         throw error;
@@ -946,15 +957,15 @@ export class PageSession {
   }
 
   applySettings(settings) {
-    const previousTargetLanguage = this.settings.targetLanguage;
+    const previousProviderFingerprint = providerFingerprint(this.settings);
     const wasTranslatingTitle = this.settings.translatePageTitle || this.legacyTranslatePageTitle;
     this.legacyTranslatePageTitle = false;
     this.settings = normalizeSettings({...this.settings, ...settings});
 
-    if (this.usesDefaultProvider && previousTargetLanguage !== this.settings.targetLanguage) {
+    if (this.usesDefaultProvider && previousProviderFingerprint !== providerFingerprint(this.settings)) {
       const shouldRestart = this.running || Boolean(this.controller);
       this.stop({notify: false});
-      this.provider = new ChromeTranslateProvider({targetLanguage: this.settings.targetLanguage});
+      this.provider = createTranslationProvider(providerOptions(this.settings));
       this.translationCache.clear();
       if (shouldRestart) this.start();
       return;

@@ -5,11 +5,14 @@ import {
   createDefaultSettings,
   loadSettings,
   normalizeSettings,
+  openAiHostPermissionPattern,
   parseSettings,
   saveSettings,
   serializeSettings,
   settingsFingerprint,
-  subscribeToSettings
+  subscribeToSettings,
+  TRANSLATION_PROVIDERS,
+  validateSettingsDocument
 } from '../settings.js';
 import AppearancePage from './pages/AppearancePage.vue';
 import TranslationServicePage from './pages/TranslationServicePage.vue';
@@ -96,7 +99,21 @@ async function persistSettings(value) {
   saving.value = true;
   error.value = '';
   try {
-    const next = await saveSettings(value);
+    const validated = validateSettingsDocument(value);
+    if (validated.translationProvider === TRANSLATION_PROVIDERS.OPENAI_COMPATIBLE) {
+      const origin = openAiHostPermissionPattern(validated.openAiBaseUrl);
+      if (!origin) {
+        showError(t('settingsInvalid'));
+        return false;
+      }
+      const permissions = globalThis.chrome?.permissions;
+      const granted = await permissions?.request?.({origins: [origin]}) === true;
+      if (!granted) {
+        showError(t('servicePermissionDenied'));
+        return false;
+      }
+    }
+    const next = await saveSettings(validated);
     applySavedSettings(next);
     savedPulse.value = true;
     if (savedTimer != null) globalThis.clearTimeout?.(savedTimer);
